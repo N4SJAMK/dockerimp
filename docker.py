@@ -94,7 +94,7 @@ class ContainerManager():
             raise ContainerManagerException("This state requires name or id")
         if not params.get("image"):
             raise ContainerManagerException("This state requires image")
-        container = self.find_container(params.get("name"))
+        container, _ = self.find_container(params.get("name"))
         if not container:
             container = self.create_container()
         elif not self.ensure_same(container):
@@ -103,42 +103,47 @@ class ContainerManager():
 
     def ensure_running(self):
         container = self.ensure_present()
-        if not self.find_container(container['Id'], all = False):
+        if not self.find_container(container['Id'])[1]:
             self.start_container(container)
 
     def ensure_stopped(self):
         params = self.module.params
         if not params.get("name"):
             raise ContainerManagerException("This state requires name or id")
-        container = self.find_container(params.get("name"), all = True)
+        container, running = self.find_container(params.get("name"))
         if not container:
             raise ContaqinerManagerException("Container not found")
-        container = self.find_container(params.get("name"), all = False)
-        if container:
+        if running:
             self.stop_container(container)
 
 
     def ensure_absent(self):
+        params = self.module.params
         if not params.get("name"):
             raise ContainerManagerException("This state requires name or id")
-        container = self.find_container(params.get("name"), all = False)
-        if container:
+        container, running = self.find_container(params.get("name"))
+        if running:
             self.stop_container(container)
-        container = self.find_container(params.get("name"), all = True)
         if container:
             self.remove_container(container)
 
     def restart(self):
         pass
 
-    def find_container(self, name, all = True):
-        containers = self.client.containers(all = all)
+    def find_container(self, name):
+        containers = self.client.containers()
         c = [x for x in containers if 
                 (x['Names'][0] == "/{0}".format(name)) or
                 (x['Id'] == name)]
-        if not c:
-            return None
-        return c[0]
+        if c:
+            return c[0], True
+        containers = self.client.containers(all = True)
+        c = [x for x in containers if 
+                (x['Names'][0] == "/{0}".format(name)) or
+                (x['Id'] == name)]
+        if c:
+            return c[0], False
+        return None, False
 
     def create_container(self):
         key_filter = [
@@ -151,7 +156,7 @@ class ContainerManager():
         ]
         params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
         container_id = self.client.create_container(**params) 
-        container = self.find_container(container_id['Id'])
+        container, _ = self.find_container(container_id['Id'])
         self.write_log('CREATED', container)
         return container
 
@@ -164,16 +169,20 @@ class ContainerManager():
         ]
         params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
         self.client.start(container, **params)
-        container = self.find_container(container['Id'])
+        container, _ = self.find_container(container['Id'])
         self.write_log('STARTED', container)
 
     def stop_container(self, container):
         self.client.stop(container)
-        container = self.find_container(container['Id'])
+        container, _ = self.find_container(container['Id'])
         self.write_log('STOPPED', container)
 
     def remove_container(self, container):
-        
+        self.client.remove_container(container)
+        c, _ = self.find_container(container['Id'])
+        if c:
+            raise ContainerManagerException("Could not remove the container")
+        self.write_log('REMOVED', container)
 
     def ensure_same(self, container):
         pass
