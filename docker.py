@@ -91,17 +91,20 @@ class ContainerManager():
     def ensure_present(self):
         params = self.module.params
         if not params.get("name"):
-            raise ContainerManagerException("State 'present' requires name or id")
+            raise ContainerManagerException("This state requires name or id")
         if not params.get("image"):
-            raise ContainerManagerException("State 'present' requires image")
+            raise ContainerManagerException("This state requires image")
         container = self.find_container(params.get("name"))
         if not container:
-            self.create_container()
+            container = self.create_container()
         elif not self.ensure_same(container):
             pass
+        return container
 
     def ensure_running(self):
-        pass
+        container = self.ensure_present()
+        if not self.find_container(container['Id'], all = False):
+            self.start_container(container)
 
     def ensure_stopped(self):
         pass
@@ -114,7 +117,9 @@ class ContainerManager():
 
     def find_container(self, name, all = True):
         containers = self.client.containers(all = all)
-        c = [x for x in containers if x["Names"][0] == "/{0}".format(name)]
+        c = [x for x in containers if 
+                (x['Names'][0] == "/{0}".format(name)) or
+                (x['Id'] == name)]
         if not c:
             return None
         return c[0]
@@ -129,10 +134,26 @@ class ContainerManager():
             'memswap_limit'
         ]
         params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
-        container = self.client.create_container(**params) 
+        container_id = self.client.create_container(**params) 
+        container = self.find_container(container_id['Id'])
         if not self.changes_made.get('CREATED'):
             self.changes_made['CREATED'] = []
         self.changes_made['CREATED'].append(container)
+        return container
+
+    def start_container(self, container):
+        key_filter = [
+            'binds', 'port_bindings', 'lxc_conf',
+            'publish_all_ports', 'links', 'privileged',
+            'dns', 'dns_search', 'volumes_from', 'network_mode',
+            'restart_policy', 'cap_add', 'cap_drop'
+        ]
+        params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
+        self.client.start(container, **params)
+        container = self.find_container(container['Id'])
+        if not self.changes_made.get('STARTED'):
+            self.changes_made['STARTED'] = []
+        self.changes_made['STARTED'].append(container)
 
     def ensure_same(self, container):
         pass
@@ -164,7 +185,8 @@ def main():
         'expose':   { 'default': None },
         'links':    { 'default': None },
     }
-    module = AnsibleModule(argument_spec = arguments, supports_check_mode = True)
+    #module = AnsibleModule(argument_spec = arguments, supports_check_mode = True)
+    module = AnsibleModule(argument_spec = arguments)
     try:
 
         manager = ContainerManager(module)
