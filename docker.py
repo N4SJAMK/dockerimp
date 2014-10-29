@@ -107,10 +107,26 @@ class ContainerManager():
             self.start_container(container)
 
     def ensure_stopped(self):
-        pass
+        params = self.module.params
+        if not params.get("name"):
+            raise ContainerManagerException("This state requires name or id")
+        container = self.find_container(params.get("name"), all = True)
+        if not container:
+            raise ContaqinerManagerException("Container not found")
+        container = self.find_container(params.get("name"), all = False)
+        if container:
+            self.stop_container(container)
+
 
     def ensure_absent(self):
-        pass
+        if not params.get("name"):
+            raise ContainerManagerException("This state requires name or id")
+        container = self.find_container(params.get("name"), all = False)
+        if container:
+            self.stop_container(container)
+        container = self.find_container(params.get("name"), all = True)
+        if container:
+            self.remove_container(container)
 
     def restart(self):
         pass
@@ -136,9 +152,7 @@ class ContainerManager():
         params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
         container_id = self.client.create_container(**params) 
         container = self.find_container(container_id['Id'])
-        if not self.changes_made.get('CREATED'):
-            self.changes_made['CREATED'] = []
-        self.changes_made['CREATED'].append(container)
+        self.write_log('CREATED', container)
         return container
 
     def start_container(self, container):
@@ -151,9 +165,15 @@ class ContainerManager():
         params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
         self.client.start(container, **params)
         container = self.find_container(container['Id'])
-        if not self.changes_made.get('STARTED'):
-            self.changes_made['STARTED'] = []
-        self.changes_made['STARTED'].append(container)
+        self.write_log('STARTED', container)
+
+    def stop_container(self, container):
+        self.client.stop(container)
+        container = self.find_container(container['Id'])
+        self.write_log('STOPPED', container)
+
+    def remove_container(self, container):
+        
 
     def ensure_same(self, container):
         pass
@@ -165,6 +185,12 @@ class ContainerManager():
             msg = self.changes_made
         return msg
 
+    def write_log(self, action, info):
+        if not self.changes_made.get(action):
+            self.changes_made[action] = []
+        self.changes_made[action].append(info)
+
+
     def has_changes(self):
         if self.changes_made:
             return True
@@ -174,8 +200,8 @@ def main():
     arguments = {
         'state': {
             'required': True,
-            'choises': ["present", "running", "stopped", "absent", "restarted"]
-            },
+            'choices': ["present", "running", "stopped", "absent", "restarted"]
+        },
         'name':     { 'default': None, 'aliases': ["id"] },
         'image':    { 'default': None },
         'env':      { 'default': None },
