@@ -84,6 +84,9 @@ class ContainerManager():
     def __init__(self, module):
         self.module = module
         self.client = docker.Client(base_url = module.params.get("client_url"))
+        self.changed = False
+        self.check_mode = module.check_mode
+        self.changes_made = {}
 
     def ensure_present(self):
         params = self.module.params
@@ -126,10 +129,25 @@ class ContainerManager():
             'memswap_limit'
         ]
         params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
-        self.client.create_container(**params) 
+        container = self.client.create_container(**params) 
+        if not self.changes_made.get('CREATED'):
+            self.changes_made['CREATED'] = []
+        self.changes_made['CREATED'].append(container)
 
     def ensure_same(self, container):
         pass
+
+    def generate_message(self):
+        if not self.has_changes():
+            msg = "Up to date"
+        else:
+            msg = self.changes_made
+        return msg
+
+    def has_changes(self):
+        if self.changes_made:
+            return True
+        return False
 
 def main():
     arguments = {
@@ -146,8 +164,9 @@ def main():
         'expose':   { 'default': None },
         'links':    { 'default': None },
     }
-    module = AnsibleModule(argument_spec = arguments)
+    module = AnsibleModule(argument_spec = arguments, supports_check_mode = True)
     try:
+
         manager = ContainerManager(module)
         state = module.params.get("state")
         if state == "present":
@@ -160,6 +179,8 @@ def main():
             manager.ensure_absent()
         elif state == "restarted":
             manager.restart()
+        module.exit_json(changed = manager.has_changes(), msg = manager.generate_message())
+
     except ContainerManagerException as e:
         module.fail_json(msg = str(e))
     except docker.errors.APIError as e:
