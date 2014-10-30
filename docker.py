@@ -183,7 +183,7 @@ class ContainerManager():
                     if len(values) is not 2 and len(values) is not 3:
                         raise ContainerManagerException({'Invalid argument': params['ports']})
                     port_and_prot = values[-1].split("/")
-                    if len(port_and_prot) is not 1 and len(port_and_prot) is not 2:
+                    if len(port_and_prot) > 2:
                         raise ContainerManagerException({'Invalid argument': params['ports']})
                     p = (port_and_prot[0], port_and_prot[1]) if len(port_and_prot) is 2 else port_and_prot[0]
                     port_bindings.append(p)
@@ -254,13 +254,13 @@ class ContainerManager():
                         key = prot_and_port[0]
                     else:
                         raise ContainerManagerException({'Invalid argument': params['ports']})
-                    if len(values) is 3:
-                        if values[1]:
-                            val = (values[0], values[1])
+                    if bind_ip:
+                        if host_port:
+                            val = (bind_ip, host_port)
                         else:
-                            val = (values[0],)
+                            val = (bind_ip,)
                     else:
-                        val = values[0] or None
+                        val = host_port or None
                     port_bindings[key] = val 
                 params['port_bindings'] = port_bindings
 
