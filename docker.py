@@ -70,6 +70,7 @@ options:
         aliases: []
 '''
 import sys
+import copy
 try:
     import docker.client
 except ImportError as e:
@@ -154,6 +155,20 @@ class ContainerManager():
         return None, False
 
     def create_container(self):
+        params = copy.deepcopy(self.module.params)
+        try:
+            if params.get('volumes'):
+                if type(params['volumes']) is str:
+                    volumes = params['volumes'].split(",")
+                elif type(params['volumes']) is list:
+                    volumes = params['volumes']
+                else:
+                    raise ContainerManagerException({'Invalid argument': params['volumes']})
+                mount_points = [x.split(":")[1] for x in volumes]
+                params['volumes'] = mount_points
+        except IndexError as e:
+            raise ContainerManagerException({'Invalid argument': params['volumes']})
+
         key_filter = [
             'image', 'command', 'hostname', 'user',
             'detach', 'stdin_open', 'tty', 'mem_limit',
@@ -162,21 +177,41 @@ class ContainerManager():
             'entrypoint', 'cpu_shares', 'working_dir',
             'memswap_limit'
         ]
-        params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
-        container_id = self.client.create_container(**params) 
+        filtered = { x: params[x] for x in key_filter if x in params }
+
+        container_id = self.client.create_container(**filtered) 
         container, _ = self.find_container(container_id['Id'])
         self.write_log('CREATED', container)
         return container
 
     def start_container(self, container):
+        params = copy.deepcopy(self.module.params)
+        if params.get('volumes'):
+            try:
+                if type(params['volumes']) is str:
+                    volumes = params['volumes'].split(",")
+                elif type(params['volumes']) is list:
+                    volumes = params['volumes']
+                else:
+                    raise ContainerManagerException({'Invalid argument': params['volumes']})
+                binds = {}
+                for i in volumes:
+                    j = i.split(":")
+                    ro = j[2] if len(j) is 3 else False
+                    binds[j[0]] = {'bind': j[1], 'ro': ro}
+                params['binds'] = binds
+            except IndexError as e:
+                raise ContainerManagerException({'Invalid argument': params['volumes']})
+
         key_filter = [
             'binds', 'port_bindings', 'lxc_conf',
             'publish_all_ports', 'links', 'privileged',
             'dns', 'dns_search', 'volumes_from', 'network_mode',
             'restart_policy', 'cap_add', 'cap_drop'
         ]
-        params = { x: self.module.params[x] for x in key_filter if x in self.module.params }
-        self.client.start(container, **params)
+        filtered = { x: params[x] for x in key_filter if x in params }
+
+        self.client.start(container, **filtered)
         container, _ = self.find_container(container['Id'])
         self.write_log('STARTED', container)
 
@@ -202,7 +237,7 @@ class ContainerManager():
 
     def generate_message(self):
         if not self.has_changes():
-            msg = "Up to date"
+            msg = "Up to date. No changes made"
         else:
             msg = self.changes_made
         return msg
