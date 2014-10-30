@@ -83,18 +83,18 @@ class ContainerManager():
 
     def __init__(self, module):
         self.module = module
-        self.client = docker.Client(base_url = module.params.get("client_url"))
+        self.client = docker.Client(base_url = module.params.get('client_url'))
         self.changed = False
         self.check_mode = module.check_mode
         self.changes_made = {}
 
     def ensure_present(self):
         params = self.module.params
-        if not params.get("name"):
+        if not params.get('name'):
             raise ContainerManagerException("This state requires name or id")
-        if not params.get("image"):
+        if not params.get('image'):
             raise ContainerManagerException("This state requires image")
-        container, _ = self.find_container(params.get("name"))
+        container, _ = self.find_container(params.get('name'))
         if not container:
             container = self.create_container()
         elif not self.ensure_same(container):
@@ -108,9 +108,9 @@ class ContainerManager():
 
     def ensure_stopped(self):
         params = self.module.params
-        if not params.get("name"):
+        if not params.get('name'):
             raise ContainerManagerException("This state requires name or id")
-        container, running = self.find_container(params.get("name"))
+        container, running = self.find_container(params.get('name'))
         if not container:
             raise ContaqinerManagerException("Container not found")
         if running:
@@ -119,16 +119,24 @@ class ContainerManager():
 
     def ensure_absent(self):
         params = self.module.params
-        if not params.get("name"):
+        if not params.get('name'):
             raise ContainerManagerException("This state requires name or id")
-        container, running = self.find_container(params.get("name"))
+        container, running = self.find_container(params.get('name'))
         if running:
             self.stop_container(container)
         if container:
             self.remove_container(container)
 
     def restart(self):
-        pass
+        params = self.module.params
+        if not params.get('name'):
+            raise ContainerManagerException("This state requires name or id")
+        container, running = self.find_container(params.get('name'))
+        if not container:
+            raise ContainerManagerException("Container not found")
+        if not running:
+            raise ContainerManagerException("Container not running")
+        self.restart_container(container)
 
     def find_container(self, name):
         containers = self.client.containers()
@@ -184,6 +192,11 @@ class ContainerManager():
             raise ContainerManagerException("Could not remove the container")
         self.write_log('REMOVED', container)
 
+    def restart_container(self, container):
+        self.client.restart(container)
+        container, _ = self.find_container(container['Id'])
+        self.write_log('RESTARTED', container)
+
     def ensure_same(self, container):
         pass
 
@@ -225,7 +238,7 @@ def main():
     try:
 
         manager = ContainerManager(module)
-        state = module.params.get("state")
+        state = module.params.get('state')
         if state == "present":
             manager.ensure_present()
         elif state == "running":
