@@ -255,15 +255,11 @@ class ContainerManager():
                     else:
                         raise ContainerManagerException({'Invalid argument': params['ports']})
                     if bind_ip:
-                        if host_port:
-                            val = (bind_ip, host_port)
-                        else:
-                            val = (bind_ip,)
+                        val = (bind_ip, host_port) if host_port else (bind_ip,)
                     else:
                         val = host_port or None
                     port_bindings[key] = val 
                 params['port_bindings'] = port_bindings
-
 
             except IndexError as e:
                 raise ContainerManagerException({'Invalid argument': params['ports']})
