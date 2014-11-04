@@ -105,7 +105,7 @@ class ContainerManager():
                 binds = {}
                 for i in volumes:
                     j = i.split(":")
-                    ro = j[2] if len(j) is 3 else False
+                    ro = j[2] if len(j) == 3 else False
                     binds[j[0]] = {'bind': j[1], 'ro': ro}
 
                 params['binds'] = binds
@@ -126,24 +126,24 @@ class ContainerManager():
                 for i in port_params:
                     values = i.split(":")
                     len_values = len(values)
-                    if len_values is not 2 and len_values is not 3:
+                    if len_values != 2 and len_values != 3:
                         raise ContainerManagerException({'Invalid argument': params['ports']})
                     port_and_prot = values[-1].split("/")
                     len_port_and_prot = len(port_and_prot)
                     if len_port_and_prot > 2:
                         raise ContainerManagerException({'Invalid argument': params['ports']})
-                    p = (port_and_prot[0], port_and_prot[1]) if len_port_and_prot is 2 else port_and_prot[0]
+                    p = (port_and_prot[0], port_and_prot[1]) if len_port_and_prot == 2 else port_and_prot[0]
                     ports.append(p)
 
                 port_bindings = {}
                 for i in port_params:
                     values = i.split(":")
                     len_values = len(values)
-                    if len_values is 2:
+                    if len_values == 2:
                         host_port = values[0]
                         prot_and_port = values[1]
                         bind_ip = None
-                    elif len_values is 3:
+                    elif len_values == 3:
                         host_port = values[1]
                         prot_and_port = values[2]
                         bind_ip = values[0]
@@ -151,9 +151,9 @@ class ContainerManager():
                         raise ContainerManagerException({'Invalid argument': params['ports']})
                     prot_and_port = prot_and_port.split("/")
                     len_prot_and_port = len(prot_and_port)
-                    if len_prot_and_port is 2:
+                    if len_prot_and_port == 2:
                         key = "{0}/{1}".format(prot_and_port[0], prot_and_port[1])
-                    elif len_prot_and_port is 1:
+                    elif len_prot_and_port == 1:
                         key = prot_and_port[0]
                     else:
                         raise ContainerManagerException({'Invalid argument': params['ports']})
@@ -181,7 +181,7 @@ class ContainerManager():
         if not container:
             container = self.create_container()
         elif not self.ensure_same(container):
-            pass
+            raise ContainerManagerException("Restart needed")
         return container
 
     def ensure_running(self):
@@ -235,8 +235,22 @@ class ContainerManager():
             return c[0], False
         return None, False
 
+    def running_latest_image(self, container, image):
+        if not container.get('Config'):
+            container_info = self.client.inspect_container(container)
+        else:
+            container_info = container
+        image_info = self.get_image_info(image)
+        if image_info['Id'] == container_info['Image']:
+            return True
+        else:
+            return False
+
     def get_info(self, container):
         return self.client.inspect_container(container)
+
+    def get_image_info(self, image):
+        return self.client.inspect_image(image)
 
     def create_container(self):
         params = self.params
@@ -288,7 +302,13 @@ class ContainerManager():
         self.write_log('RESTARTED', info)
 
     def ensure_same(self, container):
-        pass
+        params = self.params
+        same = True
+        if params['ensure_latest']:
+            self.client.pull(params['image'])
+            if not self.running_latest_image(container, params['image']):
+                same = False
+        return same
 
     def generate_message(self):
         if not self.has_changes():
@@ -313,14 +333,15 @@ def main():
             'required': True,
             'choices': ["present", "running", "stopped", "absent", "restarted"]
         },
-        'name':     { 'default': None, 'aliases': ["id"] },
-        'image':    { 'default': None },
-        'env':      { 'default': None },
-        'volumes':  { 'default': None },
-        'ports':    { 'default': None },
-        'command':  { 'default': None },
-        'expose':   { 'default': None },
-        'links':    { 'default': None },
+        'name':          { 'default': None, 'aliases': ["id"] },
+        'image':         { 'default': None },
+        'env':           { 'default': None },
+        'volumes':       { 'default': None },
+        'ports':         { 'default': None },
+        'command':       { 'default': None },
+        'expose':        { 'default': None },
+        'links':         { 'default': None },
+        'ensure_latest': { 'default': False, 'choises': 'booleans' }
     }
     #module = AnsibleModule(argument_spec = arguments, supports_check_mode = True)
     module = AnsibleModule(argument_spec = arguments)
