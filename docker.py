@@ -88,9 +88,91 @@ class ContainerManager():
         self.changed = False
         self.check_mode = module.check_mode
         self.changes_made = {}
+        self.params = self.fix_parameters()
+
+    def fix_parameters(self):
+        params = copy.deepcopy(self.module.params)
+        if params.get('volumes'):
+            try:
+                if type(params['volumes']) is str:
+                    volumes = params['volumes'].split(",")
+                elif type(params['volumes']) is list:
+                    volumes = params['volumes']
+                else:
+                    raise ContainerManagerException({'Invalid argument': params['volumes']})
+                mount_points = [x.split(":")[1] for x in volumes]
+
+                binds = {}
+                for i in volumes:
+                    j = i.split(":")
+                    ro = j[2] if len(j) is 3 else False
+                    binds[j[0]] = {'bind': j[1], 'ro': ro}
+
+                params['binds'] = binds
+                params['volumes'] = mount_points
+            except IndexError as e:
+                raise ContainerManagerException({'Invalid argument': params['volumes']})
+
+        if params.get('ports'):
+            try:
+                if type(params['ports']) is str:
+                    port_params = params['ports'].split(",")
+                elif type(params['ports']) is list:
+                    port_params = params['ports']
+                else:
+                    raise ContainerManagerException({'Invalid argument': params['ports']})
+
+                ports = []
+                for i in port_params:
+                    values = i.split(":")
+                    len_values = len(values)
+                    if len_values is not 2 and len_values is not 3:
+                        raise ContainerManagerException({'Invalid argument': params['ports']})
+                    port_and_prot = values[-1].split("/")
+                    len_port_and_prot = len(port_and_prot)
+                    if len_port_and_prot > 2:
+                        raise ContainerManagerException({'Invalid argument': params['ports']})
+                    p = (port_and_prot[0], port_and_prot[1]) if len_port_and_prot is 2 else port_and_prot[0]
+                    ports.append(p)
+
+                port_bindings = {}
+                for i in port_params:
+                    values = i.split(":")
+                    len_values = len(values)
+                    if len_values is 2:
+                        host_port = values[0]
+                        prot_and_port = values[1]
+                        bind_ip = None
+                    elif len_values is 3:
+                        host_port = values[1]
+                        prot_and_port = values[2]
+                        bind_ip = values[0]
+                    else:
+                        raise ContainerManagerException({'Invalid argument': params['ports']})
+                    prot_and_port = prot_and_port.split("/")
+                    len_prot_and_port = len(prot_and_port)
+                    if len_prot_and_port is 2:
+                        key = "{0}/{1}".format(prot_and_port[0], prot_and_port[1])
+                    elif len_prot_and_port is 1:
+                        key = prot_and_port[0]
+                    else:
+                        raise ContainerManagerException({'Invalid argument': params['ports']})
+                    if bind_ip:
+                        val = (bind_ip, host_port) if host_port else (bind_ip,)
+                    else:
+                        val = host_port or None
+                    port_bindings[key] = val 
+
+                params['ports'] = ports
+                params['port_bindings'] = port_bindings
+
+            except IndexError as e:
+                raise ContainerManagerException({'Invalid argument': params['ports'], 'error': e})
+
+        return params
 
     def ensure_present(self):
-        params = self.module.params
+        params = self.params
         if not params.get('name'):
             raise ContainerManagerException("This state requires name or id")
         if not params.get('image'):
@@ -108,7 +190,7 @@ class ContainerManager():
             self.start_container(container)
 
     def ensure_stopped(self):
-        params = self.module.params
+        params = self.params
         if not params.get('name'):
             raise ContainerManagerException("This state requires name or id")
         container, running = self.find_container(params.get('name'))
@@ -117,9 +199,8 @@ class ContainerManager():
         if running:
             self.stop_container(container)
 
-
     def ensure_absent(self):
-        params = self.module.params
+        params = self.params
         if not params.get('name'):
             raise ContainerManagerException("This state requires name or id")
         container, running = self.find_container(params.get('name'))
@@ -129,7 +210,7 @@ class ContainerManager():
             self.remove_container(container)
 
     def restart(self):
-        params = self.module.params
+        params = self.params
         if not params.get('name'):
             raise ContainerManagerException("This state requires name or id")
         container, running = self.find_container(params.get('name'))
@@ -158,44 +239,7 @@ class ContainerManager():
         return self.client.inspect_container(container)
 
     def create_container(self):
-        params = copy.deepcopy(self.module.params)
-        try:
-            if params.get('volumes'):
-                if type(params['volumes']) is str:
-                    volumes = params['volumes'].split(",")
-                elif type(params['volumes']) is list:
-                    volumes = params['volumes']
-                else:
-                    raise ContainerManagerException({'Invalid argument': params['volumes']})
-                mount_points = [x.split(":")[1] for x in volumes]
-                params['volumes'] = mount_points
-        except IndexError as e:
-            raise ContainerManagerException({'Invalid argument': params['volumes']})
-
-        if params.get('ports'):
-            try:
-                if type(params['ports']) is str:
-                    ports = params['ports'].split(",")
-                elif type(params['ports']) is list:
-                    ports = params['ports']
-                else:
-                    raise ContainerManagerException({'Invalid argument': params['ports']})
-                port_bindings = []
-                for i in ports:
-                    values = i.split(":")
-                    len_values = len(values)
-                    if len_values is not 2 and len_values is not 3:
-                        raise ContainerManagerException({'Invalid argument': params['ports']})
-                    port_and_prot = values[-1].split("/")
-                    len_port_and_prot = len(port_and_prot)
-                    if len_port_and_prot > 2:
-                        raise ContainerManagerException({'Invalid argument': params['ports']})
-                    p = (port_and_prot[0], port_and_prot[1]) if len_port_and_prot is 2 else port_and_prot[0]
-                    port_bindings.append(p)
-                params['ports'] = port_bindings
-
-            except IndexError as e:
-                raise ContainerManagerException({'Invalid argument': params['ports'], 'error': e})
+        params = self.params
 
         key_filter = [
             'image', 'command', 'hostname', 'user',
@@ -213,64 +257,7 @@ class ContainerManager():
         return container
 
     def start_container(self, container):
-        params = copy.deepcopy(self.module.params)
-        if params.get('volumes'):
-            try:
-                if type(params['volumes']) is str:
-                    volumes = params['volumes'].split(",")
-                elif type(params['volumes']) is list:
-                    volumes = params['volumes']
-                else:
-                    raise ContainerManagerException({'Invalid argument': params['volumes']})
-                binds = {}
-                for i in volumes:
-                    j = i.split(":")
-                    ro = j[2] if len(j) is 3 else False
-                    binds[j[0]] = {'bind': j[1], 'ro': ro}
-                params['binds'] = binds
-            except IndexError as e:
-                raise ContainerManagerException({'Invalid argument': params['volumes']})
-
-        if params.get('ports'):
-            try:
-                if type(params['ports']) is str:
-                    ports = params['ports'].split(",")
-                elif type(params['ports']) is list:
-                    ports = params['ports']
-                else:
-                    raise ContainerManagerException({'Invalid argument': params['ports']})
-                port_bindings = {}
-                for i in ports:
-                    values = i.split(":")
-                    len_values = len(values)
-                    if len_values is 2:
-                        host_port = values[0]
-                        prot_and_port = values[1]
-                        bind_ip = None
-                    elif len_values is 3:
-                        host_port = values[1]
-                        prot_and_port = values[2]
-                        bind_ip = values[0]
-                    else:
-                        raise ContainerManagerException({'Invalid argument': params['ports']})
-                    prot_and_port = prot_and_port.split("/")
-                    len_prot_and_port = len(prot_and_port)
-                    if len_prot_and_port is 2:
-                        key = "{0}/{1}".format(prot_and_port[0], prot_and_port[1])
-                    elif len_prot_and_port is 1:
-                        key = prot_and_port[0]
-                    else:
-                        raise ContainerManagerException({'Invalid argument': params['ports']})
-                    if bind_ip:
-                        val = (bind_ip, host_port) if host_port else (bind_ip,)
-                    else:
-                        val = host_port or None
-                    port_bindings[key] = val 
-                params['port_bindings'] = port_bindings
-
-            except IndexError as e:
-                raise ContainerManagerException({'Invalid argument': params['ports']})
-
+        params = self.params
         key_filter = [
             'binds', 'port_bindings', 'lxc_conf',
             'publish_all_ports', 'links', 'privileged',
