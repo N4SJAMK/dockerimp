@@ -154,6 +154,9 @@ class ContainerManager():
             return c[0], False
         return None, False
 
+    def get_info(self, container):
+        return self.client.inspect_container(container)
+
     def create_container(self):
         params = copy.deepcopy(self.module.params)
         try:
@@ -204,9 +207,9 @@ class ContainerManager():
         ]
         filtered = { x: params[x] for x in key_filter if x in params }
 
-        container_id = self.client.create_container(**filtered) 
-        container, _ = self.find_container(container_id['Id'])
-        self.write_log('CREATED', container)
+        container = self.client.create_container(**filtered) 
+        info = self.get_info(container)
+        self.write_log('CREATED', info)
         return container
 
     def start_container(self, container):
@@ -277,13 +280,13 @@ class ContainerManager():
         filtered = { x: params[x] for x in key_filter if x in params }
 
         self.client.start(container, **filtered)
-        container, _ = self.find_container(container['Id'])
-        self.write_log('STARTED', container)
+        info = self.get_info(container)
+        self.write_log('STARTED', info)
 
     def stop_container(self, container):
         self.client.stop(container)
-        container, _ = self.find_container(container['Id'])
-        self.write_log('STOPPED', container)
+        info = self.get_info(container)
+        self.write_log('STOPPED', info)
 
     def remove_container(self, container):
         self.client.remove_container(container)
@@ -294,8 +297,8 @@ class ContainerManager():
 
     def restart_container(self, container):
         self.client.restart(container)
-        container, _ = self.find_container(container['Id'])
-        self.write_log('RESTARTED', container)
+        info = self.get_info(container)
+        self.write_log('RESTARTED', info)
 
     def ensure_same(self, container):
         pass
@@ -311,7 +314,6 @@ class ContainerManager():
         if not self.changes_made.get(action):
             self.changes_made[action] = []
         self.changes_made[action].append(info)
-
 
     def has_changes(self):
         if self.changes_made:
