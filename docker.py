@@ -87,7 +87,7 @@ class ContainerManager():
         self.client = docker.Client(base_url = module.params.get('client_url'))
         self.changed = False
         self.check_mode = module.check_mode
-        self.changes_made = {}
+        self.changes_made = []
         self.params = self.fix_parameters()
 
     def fix_parameters(self):
@@ -319,9 +319,11 @@ class ContainerManager():
         return msg
 
     def write_log(self, action, info):
-        if not self.changes_made.get(action):
-            self.changes_made[action] = []
-        self.changes_made[action].append(info)
+        key_filter = [
+            'Name', 'Id', 'Image',
+        ]
+        filtered = { x: info[x] for x in key_filter if x in info }
+        self.changes_made.append({action: filtered})
 
     def has_changes(self):
         if self.changes_made:
