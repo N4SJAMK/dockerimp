@@ -169,6 +169,15 @@ class ContainerManager():
             except IndexError as e:
                 raise ContainerManagerException({'Invalid argument': params['ports'], 'error': e})
 
+        if params.get('env'):
+            if type(params['env']) is str:
+                envs = params['env'].split(",")
+            elif type(params['env']) is dict or type(params['env']) is list:
+                envs = params['env']
+            else:
+                raise ContainerManagerException({'Invalid argument': params['env']})
+            params['environment'] = envs
+
         return params
 
     def ensure_present(self):
@@ -304,11 +313,23 @@ class ContainerManager():
 
     def ensure_same(self, container):
         params = self.params
+        require_restart = False
+        require_commit = False
+        
+        container_info = self.client.inspect_container(container)
+        
+        #Ensure running the right image
+        if container_info['Config']['Image'] == params['image']:
+            require_restart = True
+
+        #Ensure running latest image if the parameter is provided
         same = True
-        if params['latest_image']:
+        if params.get('latest_image'):
             self.client.pull(params['image'])
-            if not self.running_latest_image(container, params['image']):
+            if not self.running_latest_image(container_info, params['image']):
                 same = False
+                require_restart = True
+
         return same
 
     def generate_message(self):
