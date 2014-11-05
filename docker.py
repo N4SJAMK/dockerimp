@@ -181,7 +181,8 @@ class ContainerManager():
         if not container:
             container = self.create_container()
         elif not self.ensure_same(container):
-            raise ContainerManagerException("Restart needed")
+            self.ensure_absent()
+            container = self.ensure_present()
         return container
 
     def ensure_running(self):
@@ -304,7 +305,7 @@ class ContainerManager():
     def ensure_same(self, container):
         params = self.params
         same = True
-        if params['ensure_latest']:
+        if params['latest_image']:
             self.client.pull(params['image'])
             if not self.running_latest_image(container, params['image']):
                 same = False
@@ -341,7 +342,7 @@ def main():
         'command':       { 'default': None },
         'expose':        { 'default': None },
         'links':         { 'default': None },
-        'ensure_latest': { 'default': False, 'choises': 'booleans' }
+        'latest_image':  { 'default': False, 'choises': 'booleans' }
     }
     #module = AnsibleModule(argument_spec = arguments, supports_check_mode = True)
     module = AnsibleModule(argument_spec = arguments)
