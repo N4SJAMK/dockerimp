@@ -172,10 +172,13 @@ class ContainerManager():
         if params.get('env'):
             if type(params['env']) is str:
                 envs = params['env'].split(",")
-            elif type(params['env']) is dict or type(params['env']) is list:
+            elif type(params['env']) is list:
                 envs = params['env']
+            elif type(params['env']) is dict:
+                envs = ["{0}={1}".format(x, params['env'][x]) for x in params['env']]
             else:
                 raise ContainerManagerException({'Invalid argument': params['env']})
+            envs.append("ANSIBLE_MANAGED_ENVS={0}".format(":".join([x.split("=")[0] for x in envs])))
             params['environment'] = envs
 
         return params
@@ -314,12 +317,11 @@ class ContainerManager():
     def ensure_same(self, container):
         params = self.params
         require_restart = False
-        require_commit = False
         
         container_info = self.client.inspect_container(container)
         
         #Ensure running the right image
-        if container_info['Config']['Image'] == params['image']:
+        if container_info['Config']['Image'] != params['image']:
             require_restart = True
 
         #Ensure running latest image if the parameter is provided
@@ -330,7 +332,33 @@ class ContainerManager():
                 same = False
                 require_restart = True
 
-        return same
+        #Ensure environment vars are up to date 
+        for i in container_info['Config']['Env']:
+            if "ANSIBLE_MANAGED_ENVS" in i:
+                ansible_managed_envs = i.split("=")[1].split(":")
+                #hack
+                ansible_managed_envs.append("ANSIBLE_MANAGED_ENVS")
+                has_ansible_managed_envs = True
+                break
+        else:
+            has_ansible_managed_envs = False
+        has_env_params = params.get('environment') != None
+        if has_env_params or has_ansible_managed_envs:
+            if has_env_params and has_ansible_managed_envs:
+                env_params = params['environment']
+                #Check same variables are set
+                if set(ansible_managed_envs) != set([x.split("=")[0] for x in env_params]):
+                    require_restart = True
+                #Check right values
+                else:
+                    for env in env_params:
+                        if env not in container_info['Config']['Env']:
+                            require_restart = True
+                            break
+            else:
+                require_restart = True
+
+        return require_restart != True
 
     def generate_message(self):
         if not self.has_changes():
