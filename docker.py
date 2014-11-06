@@ -2,7 +2,7 @@
 
 DOCUMENTATION = '''
 ---
-module: docker-imp
+module: dockerimp
 short_description: improved docker container management module
 description:
     - Manage docker containers with ansible
