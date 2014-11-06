@@ -287,8 +287,20 @@ class ContainerManager():
             'memswap_limit'
         ]
         filtered = { x: params[x] for x in key_filter if x in params }
-
-        container = self.client.create_container(**filtered)
+        #Hack - Try to start container, if no image found try to pull it
+        #       and try again
+        for _ in range(2):
+            try:
+                container = self.client.create_container(**filtered)
+                break
+            except docker.errors.APIError as e:
+                self.client.pull(filtered['image'])
+                #Hack - docker-py pull does not return easilly readable
+                #       data about if the pull was successefull of not.
+                #       Calling inspect_image raises an error if image is
+                #       not present
+                self.client.inspect_image(filtered['image'])
+                continue
         info = self.get_info(container)
         self.write_log('CREATED', info)
         return container
