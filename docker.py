@@ -105,7 +105,17 @@ class ContainerManager():
                 binds = {}
                 for i in volumes:
                     j = i.split(":")
-                    ro = j[2] if len(j) == 3 else False
+                    len_j = len(j)
+                    if len_j != 2 and len_j != 3:
+                        raise ContainerManagerException({'Invalid argument': params['volumes']})
+                    if len_j == 3:
+                        if j[2] == "ro":
+                            ro = True
+                        elif j[2] == "rw":
+                            ro = False
+                        else:
+                            raise ContainerManagerException({'Invalid argument': params['volumes']})
+
                     binds[j[0]] = {'bind': j[1], 'ro': ro}
 
                 params['binds'] = binds
@@ -161,7 +171,7 @@ class ContainerManager():
                         val = (bind_ip, host_port) if host_port else (bind_ip,)
                     else:
                         val = host_port or None
-                    port_bindings[key] = val 
+                    port_bindings[key] = val
 
                 params['ports'] = ports
                 params['port_bindings'] = port_bindings
@@ -235,13 +245,13 @@ class ContainerManager():
 
     def find_container(self, name):
         containers = self.client.containers()
-        c = [x for x in containers if 
+        c = [x for x in containers if
                 (x['Names'][0] == "/{0}".format(name)) or
                 (x['Id'] == name)]
         if c:
             return c[0], True
         containers = self.client.containers(all = True)
-        c = [x for x in containers if 
+        c = [x for x in containers if
                 (x['Names'][0] == "/{0}".format(name)) or
                 (x['Id'] == name)]
         if c:
@@ -278,7 +288,7 @@ class ContainerManager():
         ]
         filtered = { x: params[x] for x in key_filter if x in params }
 
-        container = self.client.create_container(**filtered) 
+        container = self.client.create_container(**filtered)
         info = self.get_info(container)
         self.write_log('CREATED', info)
         return container
@@ -317,9 +327,9 @@ class ContainerManager():
     def ensure_same(self, container):
         params = self.params
         require_restart = False
-        
+
         container_info = self.client.inspect_container(container)
-        
+
         #Ensure running the right image
         if container_info['Config']['Image'] != params['image']:
             require_restart = True
@@ -332,7 +342,7 @@ class ContainerManager():
                 same = False
                 require_restart = True
 
-        #Ensure environment vars are up to date 
+        #Ensure environment vars are up to date
         for i in container_info['Config']['Env']:
             if "ANSIBLE_MANAGED_ENVS" in i:
                 ansible_managed_envs = i.split("=")[1].split(":")
@@ -355,6 +365,21 @@ class ContainerManager():
                         if env not in container_info['Config']['Env']:
                             require_restart = True
                             break
+            else:
+                require_restart = True
+
+        #Ensure volume mountings are right
+        container_binds = container_info['HostConfig']['Binds']
+        bind_params = params.get('binds')
+        if container_binds or bind_params:
+            if container_binds and bind_params:
+                _bind_params = [
+                    ":".join([
+                        x, bind_params[x]['bind'], "ro" if bind_params[x]['ro'] else "rw"
+                    ]) for x in bind_params
+                ]
+                if set(_bind_params) != set(container_binds):
+                    require_restart = True
             else:
                 require_restart = True
 
