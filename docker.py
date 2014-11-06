@@ -246,13 +246,13 @@ class ContainerManager():
     def find_container(self, name):
         containers = self.client.containers()
         c = [x for x in containers if
-                (x['Names'][0] == "/{0}".format(name)) or
+                ((x['Names'] or [""])[0] == "/{0}".format(name)) or
                 (x['Id'] == name)]
         if c:
             return c[0], True
         containers = self.client.containers(all = True)
         c = [x for x in containers if
-                (x['Names'][0] == "/{0}".format(name)) or
+                ((x['Names'] or [""])[0] == "/{0}".format(name)) or
                 (x['Id'] == name)]
         if c:
             return c[0], False
@@ -393,6 +393,10 @@ class ContainerManager():
                 if set(_bind_params) != set(container_binds):
                     require_restart = True
             else:
+                require_restart = True
+
+        if params.get('command'):
+            if params['command'] != container['Command']:
                 require_restart = True
 
         return require_restart != True
