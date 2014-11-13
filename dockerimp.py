@@ -108,6 +108,7 @@ class ContainerManager():
                     len_j = len(j)
                     if len_j != 2 and len_j != 3:
                         raise ContainerManagerException({'Invalid argument': params['volumes']})
+                    ro = False
                     if len_j == 3:
                         if j[2] == "ro":
                             ro = True
