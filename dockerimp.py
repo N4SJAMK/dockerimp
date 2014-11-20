@@ -17,8 +17,12 @@ options:
         description:
             - Set the state of the container
         required: true
-        default: present
-        choices: ["present", "running", "stopped", "absent", "restarted"]
+        default: null
+        choices: [
+            "present", "running", "stopped", "absent",
+            "restarted", "image_present", "image_latest",
+            "image_absent"
+        ]
         aliases: []
     image:
         description:
@@ -244,6 +248,15 @@ class ContainerManager():
             raise ContainerManagerException("Container not running")
         self.restart_container(container)
 
+    def ensure_image_present(self):
+        pass
+
+    def ensure_image_latest(self):
+        pass
+
+    def ensure_image_absent(self):
+        pass
+
     def find_container(self, name):
         containers = self.client.containers()
         c = [x for x in containers if
@@ -425,7 +438,11 @@ def main():
     arguments = {
         'state': {
             'required': True,
-            'choices': ["present", "running", "stopped", "absent", "restarted"]
+            'choices': [
+                "present", "running", "stopped",
+                "absent", "restarted", "image_present",
+                "image_latest",
+            ]
         },
         'name':          { 'default': None, 'aliases': ["id"] },
         'image':         { 'default': None },
@@ -453,6 +470,12 @@ def main():
             manager.ensure_absent()
         elif state == "restarted":
             manager.restart()
+        elif state == "image_present":
+            manager.ensure_image_present()
+        elif state == "image_latest":
+            manager.ensure_image_latest()
+        elif state == "image_absent":
+            manager.ensure_image_absent()
         module.exit_json(changed = manager.has_changes(), msg = manager.generate_message())
 
     except ContainerManagerException as e:
