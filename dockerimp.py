@@ -199,12 +199,10 @@ class ContainerManager():
         return params
 
     def ensure_present(self):
-        params = self.params
-        if not params.get('name'):
-            raise ContainerManagerException("This state requires name or id")
-        if not params.get('image'):
-            raise ContainerManagerException("This state requires image")
-        container, _ = self.find_container(params.get('name'))
+        required_params = ("name", "image")
+        self.check_required_parameters(required_params)
+
+        container, _ = self.find_container(self.params.get('name'))
         if not container:
             container = self.create_container()
         elif not self.ensure_same(container):
@@ -218,30 +216,30 @@ class ContainerManager():
             self.start_container(container)
 
     def ensure_stopped(self):
-        params = self.params
-        if not params.get('name'):
-            raise ContainerManagerException("This state requires name or id")
-        container, running = self.find_container(params.get('name'))
+        required_params = ("name",)
+        self.check_required_parameters(required_params)
+
+        container, running = self.find_container(self.params.get('name'))
         if not container:
-            raise ContaqinerManagerException("Container not found")
+            raise ContainerManagerException("Container not found")
         if running:
             self.stop_container(container)
 
     def ensure_absent(self):
-        params = self.params
-        if not params.get('name'):
-            raise ContainerManagerException("This state requires name or id")
-        container, running = self.find_container(params.get('name'))
+        required_params = ("name",)
+        self.check_required_parameters(required_params)
+
+        container, running = self.find_container(self.params.get('name'))
         if running:
             self.stop_container(container)
         if container:
             self.remove_container(container)
 
     def restart(self):
-        params = self.params
-        if not params.get('name'):
-            raise ContainerManagerException("This state requires name or id")
-        container, running = self.find_container(params.get('name'))
+        required_params = ("name",)
+        self.check_required_parameters(required_params)
+
+        container, running = self.find_container(self.params.get('name'))
         if not container:
             raise ContainerManagerException("Container not found")
         if not running:
@@ -257,13 +255,22 @@ class ContainerManager():
     def ensure_image_absent(self):
         pass
 
+    def check_required_parameters(self, required):
+        for i in required:
+            if not self.params.get(i):
+                state = self.params['state']
+                error_msg = "{0} required for {1} satate".format(i, state)
+                raise ContainerManagerException(error_msg)
+
     def find_container(self, name):
+        #Search from containers that are running
         containers = self.client.containers()
         c = [x for x in containers if
                 ((x['Names'] or [""])[0] == "/{0}".format(name)) or
                 (x['Id'] == name)]
         if c:
             return c[0], True
+        #Search from all existing containers
         containers = self.client.containers(all = True)
         c = [x for x in containers if
                 ((x['Names'] or [""])[0] == "/{0}".format(name)) or
