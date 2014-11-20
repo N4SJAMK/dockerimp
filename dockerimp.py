@@ -193,7 +193,11 @@ class ContainerManager():
                 envs = ["{0}={1}".format(x, params['env'][x]) for x in params['env']]
             else:
                 raise ContainerManagerException({'Invalid argument': params['env']})
+
+            # Add special ANSIBLE_MANAGED_ENVS variable so we can track which
+            # variables are managed by ansible
             envs.append("ANSIBLE_MANAGED_ENVS={0}".format(":".join([x.split("=")[0] for x in envs])))
+
             params['environment'] = envs
 
         return params
@@ -263,14 +267,14 @@ class ContainerManager():
                 raise ContainerManagerException(error_msg)
 
     def find_container(self, name):
-        #Search from containers that are running
+        # Search from containers that are running
         containers = self.client.containers()
         c = [x for x in containers if
                 ((x['Names'] or [""])[0] == "/{0}".format(name)) or
                 (x['Id'] == name)]
         if c:
             return c[0], True
-        #Search from all existing containers
+        # Search from all existing containers
         containers = self.client.containers(all = True)
         c = [x for x in containers if
                 ((x['Names'] or [""])[0] == "/{0}".format(name)) or
@@ -308,20 +312,24 @@ class ContainerManager():
             'memswap_limit'
         ]
         filtered = { x: params[x] for x in key_filter if x in params }
-        #Hack - Try to start container, if no image found try to pull it
-        #       and try again
+
+        # Hack - Try to start container. If no image is found try to pull it
+        #        and try again
         for _ in range(2):
             try:
                 container = self.client.create_container(**filtered)
                 break
+
             except docker.errors.APIError as e:
                 self.client.pull(filtered['image'])
-                #Hack - docker-py pull does not return easilly readable
-                #       data about if the pull was successefull of not.
-                #       Calling inspect_image raises an error if image is
-                #       not present
+
+                # Hack - docker-py pull does not return easilly readable
+                #        data about if the pull was successefull or not.
+                #        Calling inspect_image raises an error if image is
+                #        not present
                 self.client.inspect_image(filtered['image'])
                 continue
+
         info = self.get_info(container)
         self.write_log('CREATED', info)
         return container
@@ -363,11 +371,11 @@ class ContainerManager():
 
         container_info = self.client.inspect_container(container)
 
-        #Ensure running the right image
+        # Ensure running the right image
         if container_info['Config']['Image'] != params['image']:
             require_restart = True
 
-        #Ensure running latest image if the parameter is provided
+        # Ensure running latest image if the parameter is provided
         same = True
         if params.get('latest_image'):
             self.client.pull(params['image'])
@@ -375,11 +383,14 @@ class ContainerManager():
                 same = False
                 require_restart = True
 
-        #Ensure environment vars are up to date
+        # Ensure environment vars are up to date
         for i in container_info['Config']['Env']:
             if "ANSIBLE_MANAGED_ENVS" in i:
                 ansible_managed_envs = i.split("=")[1].split(":")
-                #hack
+
+                # Add the magic ANSIBLE_MANAGED_ENVS key value here
+                # so that the two lists are easily comparable with
+                # set() below
                 ansible_managed_envs.append("ANSIBLE_MANAGED_ENVS")
                 has_ansible_managed_envs = True
                 break
@@ -389,10 +400,12 @@ class ContainerManager():
         if has_env_params or has_ansible_managed_envs:
             if has_env_params and has_ansible_managed_envs:
                 env_params = params['environment']
-                #Check same variables are set
+
+                # Check same variables are set
                 if set(ansible_managed_envs) != set([x.split("=")[0] for x in env_params]):
                     require_restart = True
-                #Check right values
+
+                # Check that the values are right
                 else:
                     for env in env_params:
                         if env not in container_info['Config']['Env']:
@@ -401,7 +414,7 @@ class ContainerManager():
             else:
                 require_restart = True
 
-        #Ensure volume mountings are right
+        # Ensure volume mountings are right
         container_binds = container_info['HostConfig']['Binds']
         bind_params = params.get('binds')
         if container_binds or bind_params:
