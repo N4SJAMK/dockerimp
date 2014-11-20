@@ -303,14 +303,14 @@ class ContainerManager():
     def create_container(self):
         params = self.params
 
-        key_filter = [
+        key_filter = (
             'image', 'command', 'hostname', 'user',
             'detach', 'stdin_open', 'tty', 'mem_limit',
             'ports', 'environment', 'dns', 'volumes',
             'volumes_from', 'network_disabled', 'name',
             'entrypoint', 'cpu_shares', 'working_dir',
             'memswap_limit'
-        ]
+        )
         filtered = { x: params[x] for x in key_filter if x in params }
 
         # Hack - Try to start container. If no image is found try to pull it
@@ -336,12 +336,12 @@ class ContainerManager():
 
     def start_container(self, container):
         params = self.params
-        key_filter = [
+        key_filter = (
             'binds', 'port_bindings', 'lxc_conf',
             'publish_all_ports', 'links', 'privileged',
             'dns', 'dns_search', 'volumes_from', 'network_mode',
             'restart_policy', 'cap_add', 'cap_drop'
-        ]
+        )
         filtered = { x: params[x] for x in key_filter if x in params }
 
         self.client.start(container, **filtered)
@@ -443,9 +443,9 @@ class ContainerManager():
         return msg
 
     def write_log(self, action, info):
-        key_filter = [
+        key_filter = (
             'Name', 'Id', 'Image',
-        ]
+        )
         filtered = { x: info[x] for x in key_filter if x in info }
         self.changes_made.append({action: filtered})
 
