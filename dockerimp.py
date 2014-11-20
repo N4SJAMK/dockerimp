@@ -271,14 +271,14 @@ class ContainerManager():
         containers = self.client.containers()
         c = [x for x in containers if
                 ((x['Names'] or [""])[0] == "/{0}".format(name)) or
-                (x['Id'] == name)]
+                (len(name) > 9 and x['Id'].startswith(name))]
         if c:
             return c[0], True
         # Search from all existing containers
         containers = self.client.containers(all = True)
         c = [x for x in containers if
                 ((x['Names'] or [""])[0] == "/{0}".format(name)) or
-                (x['Id'] == name)]
+                (len(name) > 9 and x['Id'].startswith(name))]
         if c:
             return c[0], False
         return None, False
