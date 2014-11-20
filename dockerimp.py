@@ -206,51 +206,63 @@ class ContainerManager():
         required_params = ("name", "image")
         self.check_required_parameters(required_params)
 
-        container, _ = self.find_container(self.params.get('name'))
-        if not container:
-            container = self.create_container()
-        elif not self.ensure_same(container):
-            self.ensure_absent()
-            container = self.ensure_present()
-        return container
+        container = self.find_container(self.params.get('name'))
+        self.__ensure_present(container)
 
     def ensure_running(self):
-        container = self.ensure_present()
-        if not self.find_container(container['Id'])[1]:
+        required_params = ("name", "image")
+        self.check_required_parameters(required_params)
+
+        container = self.find_container(self.params.get('name'))
+        container = self.__ensure_present(container)
+        if not container['State']['Running']:
+            container = self.start_container(container)
+
+    def ensure_running_latest(self):
+        required_params = ("name", "image")
+        self.check_required_parameters(required_params)
+
+        container = self.find_container(self.params['name'])
+        if not container:
+            self.__ensure_present(container)
+        elif not is_running_latest_image(container):
+            self.remove_container(container)
+            container = self.create_container()
+
+        if not container['State']['Running']:
             self.start_container(container)
 
     def ensure_stopped(self):
         required_params = ("name",)
         self.check_required_parameters(required_params)
 
-        container, running = self.find_container(self.params.get('name'))
+        container = self.find_container(self.params['name'])
         if not container:
             raise ContainerManagerException("Container not found")
-        if running:
+        if container['State']['Running']:
             self.stop_container(container)
 
     def ensure_absent(self):
         required_params = ("name",)
         self.check_required_parameters(required_params)
 
-        container, running = self.find_container(self.params.get('name'))
-        if running:
-            self.stop_container(container)
-        if container:
-            self.remove_container(container)
+        container = self.find_container(self.params['name'])
+        self.remove_container(container)
 
     def restart(self):
         required_params = ("name",)
         self.check_required_parameters(required_params)
 
-        container, running = self.find_container(self.params.get('name'))
+        container = self.find_container(self.params.get('name'))
         if not container:
             raise ContainerManagerException("Container not found")
-        if not running:
+        if not container['State']['Running']:
             raise ContainerManagerException("Container not running")
         self.restart_container(container)
 
     def ensure_image_present(self):
+        required_params = ("image",)
+        self.check_required_parameters(required_params)
         pass
 
     def ensure_image_latest(self):
@@ -258,6 +270,14 @@ class ContainerManager():
 
     def ensure_image_absent(self):
         pass
+
+    def __ensure_present(self, container = None):
+        if not container:
+            container = self.create_container()
+        elif not self.ensure_same(container):
+            self.ensure_absent()
+            container = self.__ensure_present()
+        return container
 
     def check_required_parameters(self, required):
         for i in required:
@@ -267,23 +287,19 @@ class ContainerManager():
                 raise ContainerManagerException(error_msg)
 
     def find_container(self, name):
-        # Search from containers that are running
-        containers = self.client.containers()
-        c = [x for x in containers if
-                ((x['Names'] or [""])[0] == "/{0}".format(name)) or
-                (len(name) > 9 and x['Id'].startswith(name))]
-        if c:
-            return c[0], True
-        # Search from all existing containers
         containers = self.client.containers(all = True)
         c = [x for x in containers if
                 ((x['Names'] or [""])[0] == "/{0}".format(name)) or
                 (len(name) > 9 and x['Id'].startswith(name))]
+        if len(c) > 1:
+            error_msg = "Found more than one container with name or id"
+            raise ContainerManagerException({'Unexpected error': error_msg})
         if c:
-            return c[0], False
-        return None, False
+            container = self.get_info(c[0])
+            return container
+        return None
 
-    def running_latest_image(self, container, image):
+    def is_running_latest_image(self, container, image):
         if not container.get('Config'):
             container_info = self.client.inspect_container(container)
         else:
@@ -317,7 +333,7 @@ class ContainerManager():
         #        and try again
         for _ in range(2):
             try:
-                container = self.client.create_container(**filtered)
+                c = self.client.create_container(**filtered)
                 break
 
             except docker.errors.APIError as e:
@@ -330,8 +346,8 @@ class ContainerManager():
                 self.client.inspect_image(filtered['image'])
                 continue
 
-        info = self.get_info(container)
-        self.write_log('CREATED', info)
+        container = self.get_info(c)
+        self.write_log('CREATED', container)
         return container
 
     def start_container(self, container):
@@ -345,46 +361,48 @@ class ContainerManager():
         filtered = { x: params[x] for x in key_filter if x in params }
 
         self.client.start(container, **filtered)
-        info = self.get_info(container)
-        self.write_log('STARTED', info)
+        container = self.get_info(container)
+        self.write_log('STARTED', container)
+        return container
 
     def stop_container(self, container):
         self.client.stop(container)
-        info = self.get_info(container)
-        self.write_log('STOPPED', info)
+        container = self.get_info(container)
+        self.write_log('STOPPED', container)
+        return container
 
     def remove_container(self, container):
+        if container['State']['Running']:
+            container = self.stop_container(container)
         self.client.remove_container(container)
-        c, _ = self.find_container(container['Id'])
+        c = self.find_container(container['Id'])
         if c:
             raise ContainerManagerException("Could not remove the container")
         self.write_log('REMOVED', container)
 
     def restart_container(self, container):
         self.client.restart(container)
-        info = self.get_info(container)
-        self.write_log('RESTARTED', info)
+        container = self.get_info(container)
+        self.write_log('RESTARTED', container)
 
     def ensure_same(self, container):
         params = self.params
         require_restart = False
 
-        container_info = self.client.inspect_container(container)
-
         # Ensure running the right image
-        if container_info['Config']['Image'] != params['image']:
+        if container['Config']['Image'] != params['image']:
             require_restart = True
 
         # Ensure running latest image if the parameter is provided
         same = True
         if params.get('latest_image'):
             self.client.pull(params['image'])
-            if not self.running_latest_image(container_info, params['image']):
+            if not self.running_latest_image(container, params['image']):
                 same = False
                 require_restart = True
 
         # Ensure environment vars are up to date
-        for i in container_info['Config']['Env']:
+        for i in container['Config']['Env']:
             if "ANSIBLE_MANAGED_ENVS" in i:
                 ansible_managed_envs = i.split("=")[1].split(":")
 
@@ -408,14 +426,14 @@ class ContainerManager():
                 # Check that the values are right
                 else:
                     for env in env_params:
-                        if env not in container_info['Config']['Env']:
+                        if env not in container['Config']['Env']:
                             require_restart = True
                             break
             else:
                 require_restart = True
 
         # Ensure volume mountings are right
-        container_binds = container_info['HostConfig']['Binds']
+        container_binds = container['HostConfig']['Binds']
         bind_params = params.get('binds')
         if container_binds or bind_params:
             if container_binds and bind_params:
@@ -459,9 +477,9 @@ def main():
         'state': {
             'required': True,
             'choices': [
-                "present", "running", "stopped",
-                "absent", "restarted", "image_present",
-                "image_latest",
+                "present", "running", "running_latest",
+                "stopped", "absent", "restarted",
+                "image_present", "image_latest",
             ]
         },
         'name':          { 'default': None, 'aliases': ["id"] },
@@ -472,7 +490,6 @@ def main():
         'command':       { 'default': None },
         'expose':        { 'default': None },
         'links':         { 'default': None },
-        'latest_image':  { 'default': False, 'choises': 'booleans' }
     }
     #module = AnsibleModule(argument_spec = arguments, supports_check_mode = True)
     module = AnsibleModule(argument_spec = arguments)
@@ -484,6 +501,8 @@ def main():
             manager.ensure_present()
         elif state == "running":
             manager.ensure_running()
+        elif state == "running":
+            manager.ensure_running_latest()
         elif state == "stopped":
             manager.ensure_stopped()
         elif state == "absent":
