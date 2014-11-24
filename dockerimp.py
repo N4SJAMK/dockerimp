@@ -128,6 +128,14 @@ class ContainerManager():
             except IndexError as e:
                 raise ContainerManagerException({'Invalid argument': params['volumes']})
 
+        if params.get('image'):
+            image_split = params['image'].split(":")
+            image_split_len = len(image_split)
+            if image_split_len > 2:
+                raise ContainerManagerException({'Invalid argument': params['name']})
+            elif image_split_len == 1:
+                params['image'] = "{0}:latest".format(params['image'])
+
         if params.get('ports'):
             try:
                 if type(params['ports']) is str:
@@ -322,13 +330,17 @@ class ContainerManager():
         # client.images method does not throw an error if image is not found, it just
         # returns an empty array. client.inspect_image throws an error if image is not
         # found. Propably cleaner to do this way than to catch an error.
-        images = self.client.images(name = name)
+        image_name = name.split(":")
+        images = self.client.images(name = image_name[0])
         image_len = len(images)
         if image_len == 0:
             return None
         elif image_len > 1:
-            error_msg = "Found more than one image with image tag"
-            raise ContainerManagerException({'Unexpected error': error_msg})
+            for i in images:
+                if name in i['RepoTags']:
+                    return self.client.inspect_image(name)
+            else:
+                return None
         else:
             return self.client.inspect_image(name)
 
