@@ -270,13 +270,13 @@ class ContainerManager():
         required_params = ("image",)
         self.check_required_parameters(required_params)
 
-        self.__ensure_image_latest(name)
+        self.__ensure_image_latest(self.params['image'])
 
     def ensure_image_absent(self):
         required_params = ("image",)
         self.check_required_parameters(required_params)
 
-        name = self.params['name']
+        name = self.params['image']
         if self.find_image(name):
             self.client.remove_image(name)
 
@@ -292,10 +292,10 @@ class ContainerManager():
     def __ensure_image_present(self, name):
         image = self.find_image(name)
         if not image:
-            self.client.pull(name)
+            self.pull_image(name)
 
     def __ensure_image_latest(self, name):
-        self.client.pull(name)
+        self.pull_image(name)
         return self.find_image(name)
 
     def check_required_parameters(self, required):
@@ -343,6 +343,16 @@ class ContainerManager():
 
     def get_image_info(self, image):
         return self.client.inspect_image(image)
+
+    def pull_image(self, name):
+        old = self.find_image(name)
+        self.client.pull(name)
+        new = self.find_image(name)
+        if not new:
+            error_msg = "Cannot find {0}".format(name)
+            raise ContainerManagerException({'Image not found': error_msg})
+        elif new['Id'] != (old or {}).get('Id'):
+            self.write_log('PULLED', new)
 
     def create_container(self):
         params = self.params
