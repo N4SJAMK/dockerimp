@@ -78,7 +78,7 @@ import copy
 try:
     import docker.client
 except ImportError as e:
-    print("Failed to import module {1}".format(e))
+    print("Failed to import module {0}".format(e))
     sys.exit(1)
 
 class ContainerManagerException(Exception):
