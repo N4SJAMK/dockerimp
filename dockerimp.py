@@ -206,14 +206,14 @@ class ContainerManager():
         required_params = ("name", "image")
         self.check_required_parameters(required_params)
 
-        container = self.find_container(self.params.get('name'))
+        container = self.find_container(self.params['name'])
         self.__ensure_present(container)
 
     def ensure_running(self):
         required_params = ("name", "image")
         self.check_required_parameters(required_params)
 
-        container = self.find_container(self.params.get('name'))
+        container = self.find_container(self.params['name'])
         container = self.__ensure_present(container)
         if not container['State']['Running']:
             container = self.start_container(container)
@@ -224,10 +224,10 @@ class ContainerManager():
 
         container = self.find_container(self.params['name'])
         if not container:
-            self.__ensure_present(container)
-        elif not is_running_latest_image(container):
-            self.remove_container(container)
-            container = self.create_container()
+            container = self.__ensure_present(container)
+        elif not is_running_latest_image(container, image):
+            self.__ensure_absent(container)
+            container = self.__ensure_present()
 
         if not container['State']['Running']:
             self.start_container(container)
@@ -263,21 +263,40 @@ class ContainerManager():
     def ensure_image_present(self):
         required_params = ("image",)
         self.check_required_parameters(required_params)
-        pass
+
+        self.__ensure_image_present(self.params['image'])
 
     def ensure_image_latest(self):
-        pass
+        required_params = ("image",)
+        self.check_required_parameters(required_params)
+
+        self.__ensure_image_latest(name)
 
     def ensure_image_absent(self):
-        pass
+        required_params = ("image",)
+        self.check_required_parameters(required_params)
+
+        name = self.params['name']
+        if self.find_image(name):
+            self.client.remove_image(name)
 
     def __ensure_present(self, container = None):
         if not container:
+            self.__ensure_image_present(self.params['image'])
             container = self.create_container()
         elif not self.ensure_same(container):
             self.ensure_absent()
             container = self.__ensure_present()
         return container
+
+    def __ensure_image_present(self, name):
+        image = self.find_image(name)
+        if not image:
+            self.client.pull(name)
+
+    def __ensure_image_latest(self, name):
+        self.client.pull(name)
+        return self.find_image(name)
 
     def check_required_parameters(self, required):
         for i in required:
@@ -299,12 +318,21 @@ class ContainerManager():
             return container
         return None
 
-    def is_running_latest_image(self, container, image):
-        if not container.get('Config'):
-            container_info = self.client.inspect_container(container)
+    def find_image(self, name):
+        # client.images method does not throw an error if image is not found, it just
+        # returns an empty array. client.inspect_image throws an error if image is not
+        # found. Propably cleaner to do this way than to catch an error.
+        images = self.client.images(name = name)
+        image_len = len(images)
+        if image_len == 0:
+            return None
+        elif image_len > 1:
+            error_msg = "Found more than one image with image tag"
+            raise ContainerManagerException({'Unexpected error': error_msg})
         else:
-            container_info = container
-        image_info = self.get_image_info(image)
+            return self.client.inspect_image(name)
+
+    def is_running_latest_image(self, container, image):
         if image_info['Id'] == container_info['Image']:
             return True
         else:
@@ -329,23 +357,7 @@ class ContainerManager():
         )
         filtered = { x: params[x] for x in key_filter if x in params }
 
-        # Hack - Try to start container. If no image is found try to pull it
-        #        and try again
-        for _ in range(2):
-            try:
-                c = self.client.create_container(**filtered)
-                break
-
-            except docker.errors.APIError as e:
-                self.client.pull(filtered['image'])
-
-                # Hack - docker-py pull does not return easilly readable
-                #        data about if the pull was successefull or not.
-                #        Calling inspect_image raises an error if image is
-                #        not present
-                self.client.inspect_image(filtered['image'])
-                continue
-
+        c = self.client.create_container(**filtered)
         container = self.get_info(c)
         self.write_log('CREATED', container)
         return container
