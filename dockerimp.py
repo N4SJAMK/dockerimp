@@ -72,6 +72,12 @@ options:
         required: false
         default: "unix://var/run/docker.sock"
         aliases: []
+    insecure_registry:
+        description:
+            - Trust insecure registrys
+        required: false
+        default: false
+        aliases: []
 '''
 import sys
 import copy
@@ -131,9 +137,7 @@ class ContainerManager():
         if params.get('image'):
             image_split = params['image'].split(":")
             image_split_len = len(image_split)
-            if image_split_len > 2:
-                raise ContainerManagerException({'Invalid argument': params['name']})
-            elif image_split_len == 1:
+            if image_split_len == 1:
                 params['image'] = "{0}:latest".format(params['image'])
 
         if params.get('ports'):
@@ -357,8 +361,9 @@ class ContainerManager():
         return self.client.inspect_image(image)
 
     def pull_image(self, name):
+        insecure_registry = self.params['insecure_registry']
         old = self.find_image(name)
-        self.client.pull(name)
+        self.client.pull(name, insecure_registry = insecure_registry)
         new = self.find_image(name)
         if not new:
             error_msg = "Cannot find {0}".format(name)
@@ -516,14 +521,15 @@ def main():
                 "image_present", "image_latest",
             ]
         },
-        'name':          { 'default': None, 'aliases': ["id"] },
-        'image':         { 'default': None },
-        'env':           { 'default': None },
-        'volumes':       { 'default': None },
-        'ports':         { 'default': None },
-        'command':       { 'default': None },
-        'expose':        { 'default': None },
-        'links':         { 'default': None },
+        'name':                 { 'default': None, 'aliases': ["id"] },
+        'image':                { 'default': None },
+        'env':                  { 'default': None },
+        'volumes':              { 'default': None },
+        'ports':                { 'default': None },
+        'command':              { 'default': None },
+        'expose':               { 'default': None },
+        'links':                { 'default': None },
+        'insecure_registry':    { 'default': False, 'choises': BOOLEANS },
     }
     #module = AnsibleModule(argument_spec = arguments, supports_check_mode = True)
     module = AnsibleModule(argument_spec = arguments)
@@ -554,6 +560,8 @@ def main():
     except ContainerManagerException as e:
         module.fail_json(msg = str(e))
     except docker.errors.APIError as e:
+        module.fail_json(msg = str(e))
+    except docker.errors.DockerException as e:
         module.fail_json(msg = str(e))
 
 from ansible.module_utils.basic import *
