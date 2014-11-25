@@ -135,9 +135,10 @@ class ContainerManager():
                 raise ContainerManagerException({'Invalid argument': params['volumes']})
 
         if params.get('image'):
-            image_split = params['image'].split(":")
-            image_split_len = len(image_split)
-            if image_split_len == 1:
+            # add 'latest' tag to the image name if no tag is already provided
+            image = params['image']
+            image_split = image.split("/")[-1].split(":")
+            if len(image_split) == 1:
                 params['image'] = "{0}:latest".format(params['image'])
 
         if params.get('ports'):
@@ -235,10 +236,11 @@ class ContainerManager():
         self.check_required_parameters(required_params)
 
         container = self.find_container(self.params['name'])
+        image = self.find_image(self.params['image'])
         if not container:
             container = self.__ensure_present(container)
-        elif not is_running_latest_image(container, image):
-            self.__ensure_absent(container)
+        elif not self.is_running_latest_image(container, image):
+            self.remove_container(container)
             container = self.__ensure_present()
 
         if not container['State']['Running']:
@@ -351,7 +353,7 @@ class ContainerManager():
             return self.client.inspect_image(name)
 
     def is_running_latest_image(self, container, image):
-        if image_info['Id'] == container_info['Image']:
+        if image['Id'] == container['Image']:
             return True
         else:
             return False
@@ -543,7 +545,7 @@ def main():
             manager.ensure_present()
         elif state == "running":
             manager.ensure_running()
-        elif state == "running":
+        elif state == "running_latest":
             manager.ensure_running_latest()
         elif state == "stopped":
             manager.ensure_stopped()
