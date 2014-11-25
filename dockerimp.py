@@ -335,7 +335,9 @@ class ContainerManager():
         # returns an empty array. client.inspect_image throws an error if image is not
         # found. Propably cleaner to do this way than to catch an error.
         image_name = name.split(":")
-        images = self.client.images(name = image_name[0])
+
+        # image name may contain port, so rejoin everything exept last item which is tag
+        images = self.client.images(name = ":".join(image_name[:-1]))
         image_len = len(images)
         if image_len == 0:
             return None
