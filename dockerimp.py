@@ -242,6 +242,9 @@ class ContainerManager():
         elif not self.is_running_latest_image(container, image):
             self.remove_container(container)
             container = self.__ensure_present()
+        elif not self.ensure_same(container):
+            self.ensure_absent()
+            container = self.__ensure_present()
 
         if not container['State']['Running']:
             self.start_container(container)
