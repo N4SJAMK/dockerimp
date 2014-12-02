@@ -346,14 +346,12 @@ class ContainerManager():
         image_len = len(images)
         if image_len == 0:
             return None
-        elif image_len > 1:
+        else:
             for i in images:
                 if name in i['RepoTags']:
                     return self.client.inspect_image(name)
             else:
                 return None
-        else:
-            return self.client.inspect_image(name)
 
     def is_running_latest_image(self, container, image):
         if image['Id'] == container['Image']:
