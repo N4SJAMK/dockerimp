@@ -491,6 +491,7 @@ class ContainerManager():
             else:
                 require_restart = True
 
+        # Ensure command is right
         if params.get('command'):
             if params['command'] != container['Command']:
                 require_restart = True
