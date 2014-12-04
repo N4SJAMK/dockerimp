@@ -354,6 +354,8 @@ class ContainerManager():
                 return None
 
     def is_running_latest_image(self, container, image):
+        if not image:
+            return False
         if image['Id'] == container['Image']:
             return True
         else:
