@@ -158,7 +158,7 @@ def parse_port_params(port_param):
             if len_halfs == 2:
                 host_port = halfs[0]
                 prot_port = halfs[1]
-                bind_ip = None
+                bind_ip = "0.0.0.0"
 
             elif len_halfs == 3:
                 host_port = halfs[1]
