@@ -138,17 +138,17 @@ def get_desired_state(params):
     desired_state = {}
     desired_state['ports'] = parse_port_params(params.get('ports'))
 
-def parse_port_params(ports):
+def parse_port_params(port_param):
     # Parse port params
-    if ports:
-        if type(params['ports']) is str:
-            ports = params['ports'].split(",")
-        elif type(params['ports']) is list:
-            ports = params['ports']
+    if port_param:
+        if type(port_param) is str:
+            ports = port_param.split(",")
+        elif type(port_param) is list:
+            ports = port_param
         else:
-            return None, {"Invalid parameter": params['ports']}
+            return None, {"Invalid parameter": port_param}
 
-        port_bindings = []
+        port_bindings = {}
         #for p in ports:
 
         #    halfs = p.split(":")
@@ -183,10 +183,10 @@ def parse_port_params(ports):
                 bind_ip = halfs[0]
 
             else:
-                return None, {"Invalid parameter": params['ports']}
+                return None, {"Invalid parameter": port_param}
 
             prot_port_halfs = prot_port.split("/")
-            len_prot_port = len(prot_and_port)
+            len_prot_port = len(prot_port)
 
             if len_prot_port == 2:
                 key = "{0}/{1}".format(prot_port[0], prot_port[1])
@@ -195,7 +195,7 @@ def parse_port_params(ports):
                 key = prot_port[0]
 
             else:
-                return None, {"Invalid parameter": params['ports']}
+                return None, {"Invalid parameter": port_param}
 
             if bind_ip:
                 val = (bind_ip, host_port) if host_port else (bind_ip,)
@@ -204,6 +204,8 @@ def parse_port_params(ports):
                 val = host_port or None
 
             port_bindings[key] = val
+
+        return port_bindings
 
     else:
         return None
@@ -247,4 +249,6 @@ def main():
         module.exit_json(changed = False)
 
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == "__main__":
+    main()
