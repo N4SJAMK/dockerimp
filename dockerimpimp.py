@@ -136,7 +136,9 @@ container state dict
 def get_desired_state(params):
 
     desired_state = {}
-    desired_state['ports'] = parse_port_params(params.get('ports'))
+    desired_state['ports'], err = parse_port_params(params.get('ports'))
+    if err:
+        return None, err
 
 def parse_port_params(port_param):
     # Parse port params
