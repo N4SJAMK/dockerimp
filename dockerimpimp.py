@@ -169,22 +169,22 @@ def parse_port_params(port_param):
                 return None, {"Invalid parameter": port_param}
 
             prot_port_halfs = prot_port.split("/")
-            len_prot_port = len(prot_port)
+            len_prot_port = len(prot_port_halfs)
 
             if len_prot_port == 2:
-                key = "{0}/{1}".format(prot_port[0], prot_port[1])
+                key = "{0}/{1}".format(prot_port_halfs[0], prot_port_halfs[1])
 
-            elif len_prot_and_port == 1:
-                key = prot_port[0]
+            elif len_prot_port == 1:
+                key = "{0}/tcp".format(prot_port_halfs[0])
 
             else:
                 return None, {"Invalid parameter": port_param}
 
-            if bind_ip:
-                val = (bind_ip, host_port) if host_port else (bind_ip,)
+            if bind_ip and host_port:
+                val = {'HostIp': bind_ip, 'HostPort': host_port}
 
             else:
-                val = host_port or None
+                val = None
 
             port_bindings[key] = val
 
