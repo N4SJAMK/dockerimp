@@ -193,10 +193,10 @@ def parse_port_params(port_param):
 
             port_bindings[key] = val
 
-        return port_bindings
+        return port_bindings, None
 
     else:
-        return None
+        return None, None
 
 def get_current_state(client_url):
     pass
