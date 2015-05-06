@@ -149,23 +149,6 @@ def parse_port_params(port_param):
             return None, {"Invalid parameter": port_param}
 
         port_bindings = {}
-        #for p in ports:
-
-        #    halfs = p.split(":")
-        #    len_halfs = len(halfs)
-
-        #    if len_halfs != 2 and len_halfs != 3:
-        #        return None, {"Invalid parameter": params['ports']}
-
-        #    port_prot = values[-1].split("/")
-        #    len_port_prot = len(port_prot)
-
-        #    if len_port_prot > 2:
-        #        return None, {"Invalid parameter": params['ports']}
-
-        #    p = (port_prot[0], port_prot[1]) if len_port_prot == 2 else port_prot[0]
-        #    ports.append(p)
-
 
         for p in ports:
 
