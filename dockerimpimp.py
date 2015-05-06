@@ -181,7 +181,7 @@ def parse_port_params(port_param):
                 return None, {"Invalid parameter": port_param}
 
             if bind_ip and host_port:
-                val = {'HostIp': bind_ip, 'HostPort': host_port}
+                val = [{'HostIp': bind_ip, 'HostPort': host_port}]
 
             else:
                 val = None
